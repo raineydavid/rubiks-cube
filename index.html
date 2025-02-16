@@ -4,94 +4,290 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Rubik's Cube Collection</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
     <style>
+        :root {
+            --primary-gradient: linear-gradient(135deg, #00C6FF 0%, #0072FF 100%);
+            --card-gradient: linear-gradient(135deg, #ffffff 0%, #f8f9fa 100%);
+            --accent-color: #0072FF;
+            --text-primary: #2D3748;
+            --text-secondary: #4A5568;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
         body {
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-            max-width: 800px;
+            font-family: 'SF Pro Display', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #f7f7f9;
+            color: var(--text-primary);
+            line-height: 1.6;
+        }
+
+        .container {
+            max-width: 1200px;
             margin: 0 auto;
-            padding: 20px;
-            background: #f5f5f5;
+            padding: 0 20px;
         }
-        .header {
+
+        .hero {
+            background: var(--primary-gradient);
+            color: white;
+            padding: 80px 0;
+            margin-bottom: 60px;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .hero::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-image: 
+                radial-gradient(circle at 20% 20%, rgba(255,255,255,0.1) 0%, rgba(255,255,255,0) 50%),
+                radial-gradient(circle at 80% 80%, rgba(255,255,255,0.1) 0%, rgba(255,255,255,0) 50%);
+        }
+
+        .hero-content {
+            position: relative;
+            z-index: 1;
             text-align: center;
-            margin-bottom: 40px;
         }
+
+        .hero h1 {
+            font-size: 3.5rem;
+            font-weight: 800;
+            margin-bottom: 20px;
+            letter-spacing: -0.5px;
+        }
+
+        .hero p {
+            font-size: 1.25rem;
+            opacity: 0.9;
+            max-width: 600px;
+            margin: 0 auto;
+        }
+
+        .cube-icon {
+            font-size: 2.5rem;
+            margin-bottom: 20px;
+            animation: rotate 4s infinite linear;
+        }
+
+        @keyframes rotate {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+        }
+
         .games-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-            gap: 20px;
+            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+            gap: 30px;
+            padding: 20px 0;
         }
+
         .game-card {
-            background: white;
-            border-radius: 8px;
-            padding: 20px;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-            transition: transform 0.2s;
+            background: var(--card-gradient);
+            border-radius: 16px;
+            padding: 25px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.05);
+            transition: all 0.3s ease;
+            position: relative;
+            overflow: hidden;
         }
+
+        .game-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 4px;
+            background: var(--primary-gradient);
+            transform: scaleX(0);
+            transform-origin: left;
+            transition: transform 0.3s ease;
+        }
+
         .game-card:hover {
-            transform: translateY(-2px);
+            transform: translateY(-5px);
+            box-shadow: 0 8px 30px rgba(0,0,0,0.1);
         }
+
+        .game-card:hover::before {
+            transform: scaleX(1);
+        }
+
         .game-title {
-            margin: 0 0 10px 0;
-            color: #1a1a1a;
+            font-size: 1.5rem;
+            font-weight: 700;
+            margin-bottom: 15px;
+            color: var(--text-primary);
         }
-        .play-button {
-            display: inline-block;
-            padding: 8px 16px;
-            background: #4a90e2;
+
+        .game-description {
+            color: var(--text-secondary);
+            margin-bottom: 20px;
+            font-size: 1rem;
+            line-height: 1.6;
+        }
+
+        .view-demo-btn {
+            display: inline-flex;
+            align-items: center;
+            padding: 12px 24px;
+            background: var(--primary-gradient);
             color: white;
             text-decoration: none;
-            border-radius: 4px;
-            font-weight: 500;
-            transition: background-color 0.2s;
+            border-radius: 8px;
+            font-weight: 600;
+            transition: all 0.3s ease;
         }
-        .play-button:hover {
-            background: #357abd;
+
+        .view-demo-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 15px rgba(0,114,255,0.3);
+        }
+
+        .view-demo-btn i {
+            margin-left: 8px;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: var(--text-secondary);
+            font-size: 1.2rem;
+        }
+
+        .loading i {
+            margin-right: 10px;
+            animation: spin 1s infinite linear;
+        }
+
+        @keyframes spin {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+        }
+
+        @media (max-width: 768px) {
+            .hero {
+                padding: 60px 0;
+            }
+
+            .hero h1 {
+                font-size: 2.5rem;
+            }
+
+            .hero p {
+                font-size: 1.1rem;
+            }
+
+            .games-grid {
+                gap: 20px;
+            }
         }
     </style>
 </head>
 <body>
-    <div class="header">
-        <h1>Rubik's Cube Games Collection</h1>
+    <div class="hero">
+        <div class="container hero-content">
+            <i class="fas fa-cube cube-icon"></i>
+            <h1>Rubik's Cube Collection</h1>
+            <p>Explore interactive 3D visualizations and implementations of the world's most famous puzzle</p>
+        </div>
     </div>
 
-    <div class="games-grid" id="gamesContainer">
-        <!-- Games will be populated here -->
+    <div class="container">
+        <div class="games-grid" id="gamesContainer">
+            <div class="loading">
+                <i class="fas fa-spinner"></i>Loading visualizations...
+            </div>
+        </div>
     </div>
 
     <script>
-        function createGameCard(filename) {
+        async function checkFileExists(url) {
+            try {
+                const response = await fetch(url, { method: 'HEAD' });
+                return response.ok;
+            } catch {
+                return false;
+            }
+        }
+
+        async function getGameTitle(url) {
+            try {
+                const response = await fetch(url);
+                const text = await response.text();
+                const titleMatch = text.match(/<title>(.*?)<\/title>/i);
+                const descMatch = text.match(/<meta\s+name="description"\s+content="(.*?)"\s*\/?>/i);
+                return {
+                    title: titleMatch ? titleMatch[1] : null,
+                    description: descMatch ? descMatch[1] : null
+                };
+            } catch {
+                return { title: null, description: null };
+            }
+        }
+
+        function createGameCard(number, title, description) {
             const card = document.createElement('div');
             card.className = 'game-card';
             
+            const filename = `game${number}.html`;
             card.innerHTML = `
-                <h2 class="game-title">Game ${filename.match(/\d+/)[0]}</h2>
-                <a href="${filename}" class="play-button">Play Game</a>
+                <h2 class="game-title">${title || `Cube Visualization ${number}`}</h2>
+                ${description ? `<p class="game-description">${description}</p>` : ''}
+                <a href="${filename}" class="view-demo-btn">
+                    View Demo
+                    <i class="fas fa-arrow-right"></i>
+                </a>
             `;
             
             return card;
         }
 
-        // Find all game HTML files and create cards
-        const container = document.getElementById('gamesContainer');
-        const gameFiles = Array.from(document.querySelectorAll('a'))
-            .filter(link => link.href.match(/game\d+\.html$/))
-            .map(link => link.href.split('/').pop())
-            .sort((a, b) => {
-                const numA = parseInt(a.match(/\d+/)[0]);
-                const numB = parseInt(b.match(/\d+/)[0]);
-                return numA - numB;
-            });
+        async function findGames() {
+            const container = document.getElementById('gamesContainer');
+            container.innerHTML = ''; // Clear loading message
+            
+            const foundGames = [];
+            let gameNumber = 1;
+            
+            while (gameNumber <= 20) {
+                const filename = `game${number}.html`;
+                if (await checkFileExists(filename)) {
+                    const { title, description } = await getGameTitle(filename);
+                    foundGames.push({ number: gameNumber, title, description });
+                }
+                gameNumber++;
+            }
 
-        gameFiles.forEach(filename => {
-            const card = createGameCard(filename);
-            container.appendChild(card);
-        });
+            if (foundGames.length === 0) {
+                container.innerHTML = `
+                    <div style="text-align: center; grid-column: 1/-1; padding: 40px; color: var(--text-secondary);">
+                        <i class="fas fa-cube" style="font-size: 2rem; margin-bottom: 15px; opacity: 0.5;"></i>
+                        <p>No visualizations found. Add files named game1.html, game2.html, etc.</p>
+                    </div>`;
+                return;
+            }
 
-        // If no games found, show message
-        if (gameFiles.length === 0) {
-            container.innerHTML = '<p style="text-align: center; grid-column: 1/-1;">No games found. Add files named game1.html, game2.html, etc.</p>';
+            foundGames
+                .sort((a, b) => a.number - b.number)
+                .forEach(game => {
+                    const card = createGameCard(game.number, game.title, game.description);
+                    container.appendChild(card);
+                });
         }
+
+        findGames();
     </script>
 </body>
 </html>
