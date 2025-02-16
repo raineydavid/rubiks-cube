@@ -262,7 +262,7 @@
             let gameNumber = 1;
             
             while (gameNumber <= 20) {
-                const filename = `game${number}.html`;
+                const filename = `game${gameNumber}.html`;
                 if (await checkFileExists(filename)) {
                     const { title, description } = await getGameTitle(filename);
                     foundGames.push({ number: gameNumber, title, description });
