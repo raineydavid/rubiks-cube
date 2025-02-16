@@ -1,0 +1,35 @@
+name: Generate Screenshots
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  screenshots:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+
+      - name: Install dependencies
+        run: npm install puppeteer
+
+      - name: Start HTTP server
+        run: npx http-server . -p 8080 &
+        
+      - name: Generate screenshots
+        run: |
+          node screenshots.js
+
+      - name: Commit screenshots
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+          git add screenshots/
+          git commit -m "Update screenshots" || echo "No changes to commit"
+          git push
