@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html lang="en">
+<!-- Previous head, style, and body sections remain the same -->
+<script>
+    // Previous functions remain the same up to clearHighlights()
+
+        function animate() {
+            requestAnimationFrame(animate);
+            
+            if (currentAnimation) {
+                updateAnimation();
+            } else if (moveQueue.length > 0) {
+                const move = moveQueue.shift();
+                performMove(move);
+            }
+
+            if (startTime !== null) {
+                const elapsed = Math.floor((Date.now() - startTime) / 1000);
+                document.getElementById('timer').textContent = formatTime(elapsed);
+            }
+
+            controls.update();
+            renderer.render(scene, camera);
+        }
+
+        function performMove(move) {
+            const threshold = 0.5;
+            let axis, angle, condition;
+
+            angle = move.includes("'") ? Math.PI/2 : -Math.PI/2;
+
+            switch (move[0]) {
+                case 'U': axis = new THREE.Vector3(0, 1, 0); condition = (pos) => pos.y > threshold; break;
+                case 'D': axis = new THREE.Vector3(0, 1, 0); condition = (pos) => pos.y < -threshold; break;
+                case 'L': axis = new THREE.Vector3(1, 0, 0); condition = (pos) => pos.x < -threshold; break;
+                case 'R': axis = new THREE.Vector3(1, 0, 0); condition = (pos) => pos.x > threshold; break;
+                case 'F': axis = new THREE.Vector3(0, 0, 1); condition = (pos) => pos.z > threshold; break;
+                case 'B': axis = new THREE.Vector3(0, 0, 1); condition = (pos) => pos.z < -threshold; break;
+            }
+
+            const rotationMatrix = new THREE.Matrix4();
+            rotationMatrix.makeRotationAxis(axis, angle);
+
+            const affectedCubies = cubies.filter(cubie => condition(cubie.position));
+            
+            currentAnimation = {
+                cubies: affectedCubies,
+                matrix: rotationMatrix,
+                progress: 0,
+                totalSteps: 10,
+                stepMatrix: new THREE.Matrix4().makeRotationAxis(axis, angle / 10)
+            };
+
+            moveCount++;
+            document.getElementById('moveCount').textContent = moveCount;
+        }
+
+        function updateAnimation() {
+            if (!currentAnimation) return;
+
+            currentAnimation.progress++;
+            
+            currentAnimation.cubies.forEach(cubie => {
+                cubie.position.applyMatrix4(currentAnimation.stepMatrix);
+                cubie.rotateOnWorldAxis(
+                    currentAnimation.stepMatrix.extractRotation().extractRotationAxis(),
+                    currentAnimation.stepMatrix.extractRotation().extractAngle()
+                );
+            });
+
+            if (currentAnimation.progress >= currentAnimation.totalSteps) {
+                // Ensure final positions are exact
+                currentAnimation.cubies.forEach(cubie => {
+                    cubie.position.round();
+                    cubie.rotation.x = Math.round(cubie.rotation.x / (Math.PI/2)) * (Math.PI/2);
+                    cubie.rotation.y = Math.round(cubie.rotation.y / (Math.PI/2)) * (Math.PI/2);
+                    cubie.rotation.z = Math.round(cubie.rotation.z / (Math.PI/2)) * (Math.PI/2);
+                });
+                
+                currentAnimation = null;
+                
+                if (moveQueue.length === 0 && isCubeSolved()) {
+                    showSolvedMessage();
+                }
+            }
+        }
+
+        function enqueueMove(move) {
+            if (startTime === null) {
+                startTime = Date.now();
+            }
+            moveQueue.push(move);
+        }
+
+        function startNewGame() {
+            resetCube();
+            const moves = ['U', 'U\'', 'D', 'D\'', 'L', 'L\'', 'R', 'R\'', 'F', 'F\'', 'B', 'B\''];
+            
+            // Generate random scramble
+            for (let i = 0; i < 20; i++) {
+                const randomMove = moves[Math.floor(Math.random() * moves.length)];
+                moveQueue.push(randomMove);
+            }
+            
+            moveCount = 0;
+            startTime = Date.now();
+            document.getElementById('moveCount').textContent = '0';
+            document.getElementById('message').classList.remove('show-message');
+        }
+
+        function resetCube() {
+            moveQueue = [];
+            currentAnimation = null;
+            moveCount = 0;
+            startTime = null;
+            
+            cubies.forEach(cubie => {
+                const originalPos = cubie.userData.originalPosition;
+                cubie.position.set(originalPos.x, originalPos.y, originalPos.z);
+                cubie.rotation.set(0, 0, 0);
+            });
+            
+            document.getElementById('moveCount').textContent = '0';
+            document.getElementById('timer').textContent = '00:00';
+            document.getElementById('message').classList.remove('show-message');
+        }
+
+        function isCubeSolved() {
+            for (const cubie of cubies) {
+                const currentPos = cubie.position;
+                const originalPos = cubie.userData.originalPosition;
+                
+                if (!currentPos.equals(originalPos)) {
+                    return false;
+                }
+                
+                // Check rotation
+                if (cubie.rotation.x % (Math.PI/2) !== 0 ||
+                    cubie.rotation.y % (Math.PI/2) !== 0 ||
+                    cubie.rotation.z % (Math.PI/2) !== 0) {
+                    return false;
+                }
+            }
+            return true;
+        }
+
+        function showSolvedMessage() {
+            const message = document.getElementById('message');
+            message.classList.add('show-message');
+            
+            setTimeout(() => {
+                message.classList.remove('show-message');
+            }, 3000);
+        }
+
+        function formatTime(seconds) {
+            const minutes = Math.floor(seconds / 60);
+            const remainingSeconds = seconds % 60;
+            return `${String(minutes).padStart(2, '0')}:${String(remainingSeconds).padStart(2, '0')}`;
+        }
+
+        function setupDragControls() {
+            const controlsElement = document.getElementById('controls');
+            let isDragging = false;
+            let currentX;
+            let currentY;
+            let initialX;
+            let initialY;
+            let xOffset = 0;
+            let yOffset = 0;
+
+            function dragStart(e) {
+                if (e.type === "touchstart") {
+                    initialX = e.touches[0].clientX - xOffset;
+                    initialY = e.touches[0].clientY - yOffset;
+                } else {
+                    initialX = e.clientX - xOffset;
+                    initialY = e.clientY - yOffset;
+                }
+
+                if (e.target.closest('#controls')) {
+                    isDragging = true;
+                    controlsElement.classList.add('dragging');
+                }
+            }
+
+            function dragEnd() {
+                isDragging = false;
+                controlsElement.classList.remove('dragging');
+            }
+
+            function drag(e) {
+                if (isDragging) {
+                    e.preventDefault();
+
+                    if (e.type === "touchmove") {
+                        currentX = e.touches[0].clientX - initialX;
+                        currentY = e.touches[0].clientY - initialY;
+                    } else {
+                        currentX = e.clientX - initialX;
+                        currentY = e.clientY - initialY;
+                    }
+
+                    xOffset = currentX;
+                    yOffset = currentY;
+
+                    const rect = controlsElement.getBoundingClientRect();
+                    const maxX = window.innerWidth - rect.width;
+                    const maxY = window.innerHeight - rect.height;
+                    
+                    xOffset = Math.min(Math.max(xOffset, 0), maxX);
+                    yOffset = Math.min(Math.max(yOffset, 0), maxY);
+
+                    setTranslate(xOffset, yOffset, controlsElement);
+                }
+            }
+
+            controlsElement.addEventListener("touchstart", dragStart, false);
+            controlsElement.addEventListener("touchend", dragEnd, false);
+            controlsElement.addEventListener("touchmove", drag, false);
+            controlsElement.addEventListener("mousedown", dragStart, false);
+            controlsElement.addEventListener("mouseup", dragEnd, false);
+            controlsElement.addEventListener("mousemove", drag, false);
+            controlsElement.addEventListener("mouseleave", dragEnd, false);
+        }
+
+        function setTranslate(xPos, yPos, el) {
+            el.style.transform = `translate(${xPos}px, ${yPos}px)`;
+        }
+
+        function onWindowResize() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        }
+    </script>
+</body>
+</html>
