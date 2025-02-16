@@ -1,0 +1,434 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Rubik's Cube Visualization</title>
+    <style>
+      body {
+        margin: 0;
+        overflow: hidden;
+      }
+      #controls {
+        position: absolute;
+        top: 10px;
+        left: 10px;
+        background: rgba(255, 255, 255, 0.8);
+        padding: 10px;
+        border-radius: 5px;
+        z-index: 100;
+        font-family: sans-serif;
+      }
+      #controls button {
+        margin: 2px;
+        font-size: 14px;
+      }
+      #legend {
+        margin-top: 8px;
+        font-size: 12px;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="controls">
+      <!-- Face move buttons -->
+      <div>
+        <button onclick="enqueueMove('U')">U</button>
+        <button onclick="enqueueMove('U\'')">U′</button>
+        <button onclick="enqueueMove('D')">D</button>
+        <button onclick="enqueueMove('D\'')">D′</button>
+        <button onclick="enqueueMove('L')">L</button>
+        <button onclick="enqueueMove('L\'')">L′</button>
+        <button onclick="enqueueMove('R')">R</button>
+        <button onclick="enqueueMove('R\'')">R′</button>
+        <button onclick="enqueueMove('F')">F</button>
+        <button onclick="enqueueMove('F\'')">F′</button>
+        <button onclick="enqueueMove('B')">B</button>
+        <button onclick="enqueueMove('B\'')">B′</button>
+      </div>
+      <!-- Middle layer move buttons -->
+      <div style="margin-top: 8px;">
+        <button onclick="enqueueMove('M')">M</button>
+        <button onclick="enqueueMove('M\'')">M′</button>
+        <button onclick="enqueueMove('E')">E</button>
+        <button onclick="enqueueMove('E\'')">E′</button>
+        <button onclick="enqueueMove('S')">S</button>
+        <button onclick="enqueueMove('S\'')">S′</button>
+      </div>
+      <!-- Scramble / Unscramble -->
+      <div style="margin-top: 8px;">
+        <button onclick="scrambleCube()">Scramble</button>
+        <button onclick="startUnscramble()">Unscramble</button>
+      </div>
+      <!-- Legend for move notations -->
+      <div id="legend">
+        <p><strong>Move Notation Explanation:</strong></p>
+        <ul>
+          <li><strong>U</strong>: Upper face</li>
+          <li><strong>D</strong>: Down face</li>
+          <li><strong>L</strong>: Left face</li>
+          <li><strong>R</strong>: Right face</li>
+          <li><strong>F</strong>: Front face</li>
+          <li><strong>B</strong>: Back face</li>
+          <li><strong>M</strong>: Middle vertical slice (|x| &lt; 0.5) – rotates opposite to L</li>
+          <li><strong>E</strong>: Equatorial slice (|y| &lt; 0.5) – rotates opposite to D</li>
+          <li><strong>S</strong>: Standing slice (|z| &lt; 0.5) – rotates same as F</li>
+        </ul>
+        <p>A move with an apostrophe (e.g., <strong>U′</strong>) means a counter-clockwise rotation; without it, the rotation is clockwise (except for M and E, where the non-prime move is defined as the inverse of the corresponding face move).</p>
+      </div>
+    </div>
+
+    <!-- Include Three.js and OrbitControls -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+    <script>
+      // Global variables
+      let scene, camera, renderer, controls;
+      let cubeGroup;
+      let cubies = [];
+      let moveQueue = [];
+      let currentAnimation = null; // Will hold an object while a face move is animating
+      let moveHistory = [];
+      let unscrambleInterval = null;
+      let isReversing = false; // When true, we are in unsolving mode
+
+      // Animation settings: each move takes 500 ms (rotate 90°)
+      const moveDuration = 500; // milliseconds
+      const rotationSpeed = (Math.PI / 2) / moveDuration; // radians per ms
+      
+      // Initialize previousTime BEFORE calling animate()
+      let previousTime = performance.now();
+
+      // Initialize scene and start the render loop
+      init();
+      animate();
+
+      function init() {
+        // Create scene and background
+        scene = new THREE.Scene();
+        scene.background = new THREE.Color(0xaaaaaa);
+
+        // Set up camera
+        camera = new THREE.PerspectiveCamera(
+          45,
+          window.innerWidth / window.innerHeight,
+          0.1,
+          1000
+        );
+        camera.position.set(5, 5, 5);
+        camera.lookAt(0, 0, 0);
+
+        // Renderer with antialiasing
+        renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        document.body.appendChild(renderer.domElement);
+
+        // OrbitControls for interactive view
+        controls = new THREE.OrbitControls(camera, renderer.domElement);
+
+        // Lighting: ambient and directional for realism
+        const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
+        scene.add(ambientLight);
+        const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+        directionalLight.position.set(5, 10, 7.5);
+        scene.add(directionalLight);
+
+        // Create a group to hold all cubies
+        cubeGroup = new THREE.Group();
+        scene.add(cubeGroup);
+
+        // Build the 3x3x3 cube (cubies at positions -1, 0, 1)
+        for (let x = -1; x <= 1; x++) {
+          for (let y = -1; y <= 1; y++) {
+            for (let z = -1; z <= 1; z++) {
+              const cubie = createCubie(x, y, z);
+              cubie.position.set(x, y, z);
+              cubeGroup.add(cubie);
+              cubies.push(cubie);
+            }
+          }
+        }
+
+        // Save each cubie's solved (original) world position and quaternion
+        cubies.forEach((cubie) => {
+          let worldPos = new THREE.Vector3();
+          cubie.getWorldPosition(worldPos);
+          cubie.userData.solvedPosition = worldPos.clone();
+
+          let worldQuat = new THREE.Quaternion();
+          cubie.getWorldQuaternion(worldQuat);
+          cubie.userData.solvedQuaternion = worldQuat.clone();
+        });
+
+        // --- Test Cases --- //
+        if (cubies.length !== 27) {
+          console.error("Test Failed: Expected 27 cubies, but got " + cubies.length);
+        } else {
+          console.log("Test Passed: 27 cubies created.");
+        }
+        
+        if (isCubeSolved()) {
+          console.log("Test Passed: Cube is in solved state after initialization.");
+        } else {
+          console.error("Test Failed: Cube is not in solved state after initialization.");
+        }
+
+        window.addEventListener("resize", onWindowResize, false);
+      }
+
+      function onWindowResize() {
+        camera.aspect = window.innerWidth / window.innerHeight;
+        camera.updateProjectionMatrix();
+        renderer.setSize(window.innerWidth, window.innerHeight);
+      }
+
+      // Create one cubie (a cube with “stickers” on the outer faces)
+      // The BoxGeometry’s material order is: [right, left, top, bottom, front, back]
+      function createCubie(x, y, z) {
+        const cubieSize = 0.95; // Slightly smaller than 1 to leave small gaps
+        const geometry = new THREE.BoxGeometry(cubieSize, cubieSize, cubieSize);
+
+        // Standard Rubik’s Cube colors:
+        // Right: red, Left: orange, Top: white, Bottom: yellow, Front: blue, Back: green.
+        const colors = {
+          right: 0xff0000,
+          left: 0xffa500,
+          top: 0xffffff,
+          bottom: 0xffff00,
+          front: 0x0000ff,
+          back: 0x00ff00,
+        };
+
+        // For each face, if the cubie is on the corresponding outer layer, give it color;
+        // otherwise use black (or dark) so only the visible “stickers” show.
+        const materials = [
+          new THREE.MeshStandardMaterial({ color: x === 1 ? colors.right : 0x000000 }), // Right
+          new THREE.MeshStandardMaterial({ color: x === -1 ? colors.left : 0x000000 }), // Left
+          new THREE.MeshStandardMaterial({ color: y === 1 ? colors.top : 0x000000 }), // Top
+          new THREE.MeshStandardMaterial({ color: y === -1 ? colors.bottom : 0x000000 }), // Bottom
+          new THREE.MeshStandardMaterial({ color: z === 1 ? colors.front : 0x000000 }), // Front
+          new THREE.MeshStandardMaterial({ color: z === -1 ? colors.back : 0x000000 }), // Back
+        ];
+
+        const mesh = new THREE.Mesh(geometry, materials);
+        return mesh;
+      }
+
+      // Main render loop
+      function animate() {
+        requestAnimationFrame(animate);
+        let currentTime = performance.now();
+        let deltaTime = currentTime - previousTime;
+        previousTime = currentTime;
+
+        // If a face move is being animated, update its rotation.
+        if (currentAnimation) {
+          updateAnimation(deltaTime);
+        } else if (moveQueue.length > 0) {
+          // Otherwise, if moves are queued, start the next move.
+          const nextMove = moveQueue.shift();
+          performMove(nextMove);
+        }
+
+        controls.update();
+        renderer.render(scene, camera);
+      }
+
+      // Update the current move animation.
+      function updateAnimation(deltaTime) {
+        if (!currentAnimation) return;
+        const { pivot, axis, targetAngle } = currentAnimation;
+        let angleStep = rotationSpeed * deltaTime;
+        // Clamp the step so we don’t overshoot.
+        if (Math.abs(currentAnimation.accumulatedAngle + angleStep) > Math.abs(targetAngle)) {
+          angleStep = targetAngle - currentAnimation.accumulatedAngle;
+        }
+        pivot.rotateOnAxis(axis, angleStep);
+        currentAnimation.accumulatedAngle += angleStep;
+
+        // When the full 90° is reached (within a small tolerance), finish up.
+        if (Math.abs(currentAnimation.accumulatedAngle) >= Math.abs(targetAngle) - 0.001) {
+          finalizeMove(pivot);
+          currentAnimation = null;
+        }
+      }
+
+      // After finishing a face rotation, “detach” the cubies from the temporary pivot
+      // so that their world transforms (position and rotation) are preserved.
+      function finalizeMove(pivot) {
+        pivot.updateMatrixWorld(true);
+        // Copy the pivot’s children array (the cubies being rotated)
+        let children = pivot.children.slice();
+        children.forEach((cubie) => {
+          // Apply the pivot’s world transform to the cubie
+          cubie.applyMatrix4(pivot.matrixWorld);
+          cubeGroup.add(cubie);
+          pivot.remove(cubie);
+        });
+        cubeGroup.remove(pivot);
+      }
+
+      // When the user clicks a move button, add that move to the queue.
+      function enqueueMove(move) {
+        moveQueue.push(move);
+      }
+
+      // Given a move (e.g., "U", "R'", "M", "E'", "S"), perform the animated 90° rotation on the appropriate slice.
+      function performMove(move) {
+        let axis, conditionFunc;
+        const threshold = 0.5;
+        let angle;
+
+        // Determine the axis, condition, and angle based on the move.
+        switch (move[0]) {
+          case "U":
+            axis = new THREE.Vector3(0, 1, 0);
+            conditionFunc = (pos) => pos.y > threshold;
+            angle = move.includes("'") ? -Math.PI / 2 : Math.PI / 2;
+            break;
+          case "D":
+            axis = new THREE.Vector3(0, 1, 0);
+            conditionFunc = (pos) => pos.y < -threshold;
+            angle = move.includes("'") ? -Math.PI / 2 : Math.PI / 2;
+            break;
+          case "L":
+            axis = new THREE.Vector3(1, 0, 0);
+            conditionFunc = (pos) => pos.x < -threshold;
+            angle = move.includes("'") ? -Math.PI / 2 : Math.PI / 2;
+            break;
+          case "R":
+            axis = new THREE.Vector3(1, 0, 0);
+            conditionFunc = (pos) => pos.x > threshold;
+            angle = move.includes("'") ? -Math.PI / 2 : Math.PI / 2;
+            break;
+          case "F":
+            axis = new THREE.Vector3(0, 0, 1);
+            conditionFunc = (pos) => pos.z > threshold;
+            angle = move.includes("'") ? -Math.PI / 2 : Math.PI / 2;
+            break;
+          case "B":
+            axis = new THREE.Vector3(0, 0, 1);
+            conditionFunc = (pos) => pos.z < -threshold;
+            angle = move.includes("'") ? -Math.PI / 2 : Math.PI / 2;
+            break;
+          // Middle layer moves:
+          case "M":
+            axis = new THREE.Vector3(1, 0, 0);
+            conditionFunc = (pos) => Math.abs(pos.x) < threshold;
+            // M move is defined as inverse of L: non-prime M rotates opposite to L.
+            angle = move.includes("'") ? Math.PI / 2 : -Math.PI / 2;
+            break;
+          case "E":
+            axis = new THREE.Vector3(0, 1, 0);
+            conditionFunc = (pos) => Math.abs(pos.y) < threshold;
+            // E move is defined as inverse of D: non-prime E rotates opposite to D.
+            angle = move.includes("'") ? Math.PI / 2 : -Math.PI / 2;
+            break;
+          case "S":
+            axis = new THREE.Vector3(0, 0, 1);
+            conditionFunc = (pos) => Math.abs(pos.z) < threshold;
+            // S move follows the same direction as F.
+            angle = move.includes("'") ? -Math.PI / 2 : Math.PI / 2;
+            break;
+          default:
+            return;
+        }
+
+        // Create a temporary group (pivot) to hold the selected cubies.
+        const pivot = new THREE.Group();
+        cubeGroup.add(pivot);
+
+        // Select cubies based on the condition function.
+        const selectedCubies = [];
+        cubeGroup.children.forEach((child) => {
+          if (child.isMesh) {
+            let pos = new THREE.Vector3();
+            child.getWorldPosition(pos);
+            if (conditionFunc(pos)) {
+              selectedCubies.push(child);
+            }
+          }
+        });
+
+        // Remove selected cubies from cubeGroup and add them to the pivot.
+        selectedCubies.forEach((cubie) => {
+          cubeGroup.remove(cubie);
+          pivot.add(cubie);
+        });
+
+        // Start the animation.
+        currentAnimation = {
+          pivot: pivot,
+          axis: axis,
+          targetAngle: angle,
+          accumulatedAngle: 0,
+          moveName: move,
+          startTime: performance.now(),
+        };
+
+        // Record the move into our history (unless it’s an inverse during unsolving).
+        if (!isReversing) {
+          moveHistory.push(move);
+        }
+      }
+
+      // --- Scramble & Unscramble Functions ---
+
+      // When the "Scramble" button is clicked, enqueue a series of random moves.
+      function scrambleCube() {
+        moveQueue = [];
+        moveHistory = [];
+        const moves = ["U", "U'", "D", "D'", "L", "L'", "R", "R'", "F", "F'", "B", "B'", "M", "M'", "E", "E'", "S", "S'"];
+        const scrambleCount = 20; // Number of random moves
+        for (let i = 0; i < scrambleCount; i++) {
+          const randomMove = moves[Math.floor(Math.random() * moves.length)];
+          moveQueue.push(randomMove);
+          moveHistory.push(randomMove);
+        }
+      }
+
+      // Every 500 ms, apply the inverse of the last move (until the cube is solved).
+      function startUnscramble() {
+        if (unscrambleInterval) return;
+        isReversing = true;
+        unscrambleInterval = setInterval(() => {
+          if (moveHistory.length === 0 || isCubeSolved()) {
+            clearInterval(unscrambleInterval);
+            unscrambleInterval = null;
+            isReversing = false;
+            return;
+          }
+          const lastMove = moveHistory.pop();
+          const inverseMove = invertMove(lastMove);
+          moveQueue.push(inverseMove);
+        }, 500);
+      }
+
+      // Invert a move: for example, if it's prime, remove the prime; if not, add one.
+      function invertMove(move) {
+        return move.includes("'") ? move.replace("'", "") : move + "'";
+      }
+
+      // Check whether the cube is “solved” by comparing each cubie’s world position and rotation
+      // to its originally stored solved state (using a small tolerance).
+      function isCubeSolved() {
+        const posTolerance = 0.1;
+        const angleTolerance = 0.1;
+        for (let cubie of cubies) {
+          let currentPos = new THREE.Vector3();
+          cubie.getWorldPosition(currentPos);
+          const solvedPos = cubie.userData.solvedPosition;
+          if (currentPos.distanceTo(solvedPos) > posTolerance) {
+            return false;
+          }
+          let currentQuat = new THREE.Quaternion();
+          cubie.getWorldQuaternion(currentQuat);
+          const solvedQuat = cubie.userData.solvedQuaternion;
+          if (currentQuat.angleTo(solvedQuat) > angleTolerance) {
+            return false;
+          }
+        }
+        return true;
+      }
+    </script>
+  </body>
+</html>
